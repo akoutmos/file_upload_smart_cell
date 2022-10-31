@@ -15,7 +15,8 @@ defmodule FileUploadSmartCell do
     ctx =
       assign(ctx,
         variable: Kino.SmartCell.prefixed_var_name("data", attrs["data"]),
-        file_path: :no_file_uploaded
+        file_path: :no_file_uploaded,
+        storage: "disk"
       )
 
     {:ok, ctx, reevaluate_on_change: true}
@@ -27,10 +28,11 @@ defmodule FileUploadSmartCell do
   end
 
   @impl true
-  def handle_event("file_read", {:binary, _info, file_contents}, ctx) do
+  def handle_event("file_read", {:binary, info, file_contents}, ctx) do
     assigns = [
       file_path: process_upload(file_contents),
-      variable: ctx.assigns.variable
+      variable: ctx.assigns.variable,
+      storage: Map.get(info, "storage", "disk")
     ]
 
     {:noreply, assign(ctx, assigns)}
@@ -63,7 +65,8 @@ defmodule FileUploadSmartCell do
   def to_attrs(ctx) do
     %{
       "variable" => ctx.assigns.variable,
-      "file_path" => ctx.assigns.file_path
+      "file_path" => ctx.assigns.file_path,
+      "storage" => ctx.assigns.storage
     }
   end
 
@@ -74,9 +77,13 @@ defmodule FileUploadSmartCell do
         with file_path when is_binary(file_path) <- unquote(attrs["file_path"]),
              true <- File.exists?(file_path),
              false <- File.dir?(file_path) do
-          file_contents = File.read!(file_path)
-          File.rm!(file_path)
-          file_contents
+          if Map.fetch!(unquote(attrs), "storage") == "disk" do
+            file_path
+          else
+            file_contents = File.read!(file_path)
+            File.rm!(file_path)
+            file_contents
+          end
         else
           _ ->
             :no_file_uploaded
